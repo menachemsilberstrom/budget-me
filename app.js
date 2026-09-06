@@ -29,7 +29,6 @@ function initApp() {
   loadStoredConfig();
   calculatePeriodKey();
   initSupabaseClient();
-  initTabs();
 }
 
 // Calculate active monthly cycle based on cycle start day
@@ -53,7 +52,10 @@ function calculatePeriodKey() {
   const endDate = new Date(year, month, state.cycleDay - 1);
   
   const formatDate = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-  document.getElementById('budget-period-display').textContent = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  const periodEl = document.getElementById('budget-period-display');
+  if (periodEl) {
+    periodEl.textContent = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  }
 }
 
 // Initialize Supabase Connection
@@ -82,12 +84,12 @@ function initSupabaseClient() {
 function updateSyncStatus(connected) {
   const el = document.getElementById('sync-indicator');
   const txt = document.getElementById('sync-text');
-  if (connected) {
-    el.classList.add('connected');
-    txt.textContent = 'מחובר';
-  } else {
-    el.classList.remove('connected');
-    txt.textContent = 'מקומי';
+  if (el) {
+    if (connected) el.classList.add('connected');
+    else el.classList.remove('connected');
+  }
+  if (txt) {
+    txt.textContent = connected ? 'מחובר' : 'מקומי';
   }
 }
 
@@ -97,8 +99,8 @@ async function fetchData() {
 
   try {
     // 1. Fetch Cycle Setting
-    const { data: setRes } = await state.supabase.from('settings').select('*').eq('key', 'cycle_day').single();
-    if (setRes) {
+    const { data: setRes } = await state.supabase.from('settings').select('*').eq('key', 'cycle_day').maybeSingle();
+    if (setRes && setRes.value) {
       state.cycleDay = parseInt(setRes.value, 10);
       calculatePeriodKey();
     }
@@ -106,7 +108,6 @@ async function fetchData() {
     // 2. Fetch Categories
     let { data: catRes } = await state.supabase.from('categories').select('*');
     if (!catRes || catRes.length === 0) {
-      // Seed default categories
       await state.supabase.from('categories').insert(DEFAULT_CATEGORIES);
       catRes = DEFAULT_CATEGORIES;
     }
@@ -123,6 +124,7 @@ async function fetchData() {
     renderAllViews();
   } catch (err) {
     console.error('Error fetching data:', err);
+    loadLocalFallbackData();
   }
 }
 
@@ -134,13 +136,11 @@ function loadLocalFallbackData() {
   renderAllViews();
 }
 
-// Save Local Data Helper
 function saveLocalFallbackData() {
   localStorage.setItem('local_cats', JSON.stringify(state.categories));
   localStorage.setItem('local_budgets', JSON.stringify(state.budgets));
 }
 
-// Real-Time Subscriptions
 function subscribeToRealtime() {
   if (!state.supabase) return;
   
@@ -182,42 +182,52 @@ function renderDashboard() {
 
   const remaining = totalActualInc - totalActualExp;
 
-  // Update Summary DOM
-  document.getElementById('dash-income-actual').textContent = `₪${totalActualInc.toLocaleString()}`;
-  document.getElementById('dash-income-planned').textContent = `מתוכנן: ₪${totalPlannedInc.toLocaleString()}`;
-  document.getElementById('dash-expense-actual').textContent = `₪${totalActualExp.toLocaleString()}`;
-  document.getElementById('dash-expense-planned').textContent = `מתוכנן: ₪${totalPlannedExp.toLocaleString()}`;
-  
+  const incActEl = document.getElementById('dash-income-actual');
+  const incPlnEl = document.getElementById('dash-income-planned');
+  const expActEl = document.getElementById('dash-expense-actual');
+  const expPlnEl = document.getElementById('dash-expense-planned');
   const remEl = document.getElementById('dash-remaining');
-  remEl.textContent = `₪${remaining.toLocaleString()}`;
-  remEl.style.color = remaining >= 0 ? 'var(--emerald)' : 'var(--coral)';
 
-  // Category Progress Bar List
+  if (incActEl) incActEl.textContent = `₪${totalActualInc.toLocaleString()}`;
+  if (incPlnEl) incPlnEl.textContent = `מתוכנן: ₪${totalPlannedInc.toLocaleString()}`;
+  if (expActEl) expActEl.textContent = `₪${totalActualExp.toLocaleString()}`;
+  if (expPlnEl) expPlnEl.textContent = `מתוכנן: ₪${totalPlannedExp.toLocaleString()}`;
+  
+  if (remEl) {
+    remEl.textContent = `₪${remaining.toLocaleString()}`;
+    remEl.style.color = remaining >= 0 ? 'var(--emerald, #10b981)' : 'var(--coral, #ef4444)';
+  }
+
   const listEl = document.getElementById('category-progress-list');
-  listEl.innerHTML = expCategoryStats.map(cat => {
-    const pct = cat.planned > 0 ? Math.min(Math.round((cat.actual / cat.planned) * 100), 100) : (cat.actual > 0 ? 100 : 0);
-    let statusClass = '';
-    if (pct > 90 && pct <= 100) statusClass = 'warning';
-    if (cat.actual > cat.planned && cat.planned > 0) statusClass = 'danger';
+  if (listEl) {
+    listEl.innerHTML = expCategoryStats.map(cat => {
+      const pct = cat.planned > 0 ? Math.min(Math.round((cat.actual / cat.planned) * 100), 100) : (cat.actual > 0 ? 100 : 0);
+      let statusClass = '';
+      if (pct > 90 && pct <= 100) statusClass = 'warning';
+      if (cat.actual > cat.planned && cat.planned > 0) statusClass = 'danger';
 
-    return `
-      <div class="cat-item" onclick="openExpenseSheet('${cat.id}', '${cat.name}')">
-        <div class="cat-header">
-          <span>${cat.icon || '📁'} ${cat.name}</span>
-          <span class="cat-amounts">₪${cat.actual.toLocaleString()} / ₪${cat.planned.toLocaleString()}</span>
+      return `
+        <div class="cat-item" onclick="openExpenseSheet('${cat.id}', '${cat.name}')">
+          <div class="cat-header">
+            <span>${cat.icon || '📁'} ${cat.name}</span>
+            <span class="cat-amounts">₪${cat.actual.toLocaleString()} / ₪${cat.planned.toLocaleString()}</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill ${statusClass}" style="width: ${pct}%"></div>
+          </div>
         </div>
-        <div class="progress-bar-bg">
-          <div class="progress-bar-fill ${statusClass}" style="width: ${pct}%"></div>
-        </div>
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
+  }
 
   renderChart(expCategoryStats);
 }
 
 function renderChart(expenses) {
-  const ctx = document.getElementById('expenseChart').getContext('2d');
+  const chartCanvas = document.getElementById('expenseChart');
+  if (!chartCanvas || !window.Chart) return;
+
+  const ctx = chartCanvas.getContext('2d');
   const activeExpenses = expenses.filter(e => e.actual > 0);
 
   const labels = activeExpenses.map(e => e.name);
@@ -249,6 +259,8 @@ function renderChart(expenses) {
 
 function renderSetupTab() {
   const container = document.getElementById('setup-categories-list');
+  if (!container) return;
+
   container.innerHTML = state.categories.map(cat => {
     const budget = state.budgets.find(b => b.category_id === cat.id) || { planned_amount: 0 };
     return `
@@ -261,53 +273,73 @@ function renderSetupTab() {
 }
 
 function renderSettingsTab() {
-  document.getElementById('cfg-url').value = localStorage.getItem('sb_url') || '';
-  document.getElementById('cfg-key').value = localStorage.getItem('sb_key') || '';
-  document.getElementById('cfg-cycle-day').value = state.cycleDay;
+  const urlEl = document.getElementById('cfg-url');
+  const keyEl = document.getElementById('cfg-key');
+  const cycleEl = document.getElementById('cfg-cycle-day');
+
+  if (urlEl) urlEl.value = localStorage.getItem('sb_url') || '';
+  if (keyEl) keyEl.value = localStorage.getItem('sb_key') || '';
+  if (cycleEl) cycleEl.value = state.cycleDay;
 
   const list = document.getElementById('manage-categories-list');
-  list.innerHTML = state.categories.map(cat => `
-    <div class="manage-row">
-      <span>${cat.icon || '📁'} ${cat.name}</span>
-      <button class="btn btn-small btn-outline" onclick="deleteCategory('${cat.id}')">מחק</button>
-    </div>
-  `).join('');
+  if (list) {
+    list.innerHTML = state.categories.map(cat => `
+      <div class="manage-row">
+        <span>${cat.icon || '📁'} ${cat.name}</span>
+        <button class="btn btn-small btn-outline" onclick="deleteCategory('${cat.id}')">מחק</button>
+      </div>
+    `).join('');
+  }
 }
 
-// Event Listeners & Actions
+// Event Listeners & Navigation Setup
 function setupEventListeners() {
-  // Navigation
+  // Navigation Tabs
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      const target = e.currentTarget;
+      const tabId = target.dataset.tab;
+      
+      if (!tabId) return;
+
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-      
-      const target = e.currentTarget;
+
       target.classList.add('active');
-      document.getElementById(target.dataset.tab).classList.add('active');
+      const tabElement = document.getElementById(tabId);
+      if (tabElement) {
+        tabElement.classList.add('active');
+      }
     });
   });
 
-  // Expense Sheet
-  document.getElementById('btn-close-sheet').addEventListener('click', closeExpenseSheet);
-  document.getElementById('expense-form').addEventListener('submit', handleAddExpense);
+  // Safe Listener Helper
+  const bindEvent = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, handler);
+  };
 
-  // Setup Form Submit
-  document.getElementById('setup-form').addEventListener('submit', handleSaveSetup);
-  document.getElementById('btn-activate-month').addEventListener('click', handleActivateNewMonth);
+  bindEvent('btn-close-sheet', 'click', closeExpenseSheet);
+  bindEvent('expense-form', 'submit', handleAddExpense);
+  bindEvent('setup-form', 'submit', handleSaveSetup);
+  bindEvent('btn-activate-month', 'click', handleActivateNewMonth);
+  bindEvent('add-category-form', 'submit', handleAddCategory);
+  bindEvent('btn-export-csv', 'click', exportCSV);
+  bindEvent('btn-export-json', 'click', exportJSON);
 
-  // Settings Forms
-  document.getElementById('btn-save-config').addEventListener('click', () => {
-    const url = document.getElementById('cfg-url').value.trim();
-    const key = document.getElementById('cfg-key').value.trim();
+  bindEvent('btn-save-config', 'click', () => {
+    const url = document.getElementById('cfg-url')?.value.trim() || '';
+    const key = document.getElementById('cfg-key')?.value.trim() || '';
     localStorage.setItem('sb_url', url);
     localStorage.setItem('sb_key', key);
     initSupabaseClient();
     alert('הגדרות חיבור נשמרו!');
   });
 
-  document.getElementById('btn-save-cycle').addEventListener('click', async () => {
-    const val = document.getElementById('cfg-cycle-day').value;
+  bindEvent('btn-save-cycle', 'click', async () => {
+    const val = document.getElementById('cfg-cycle-day')?.value;
+    if (!val) return;
+    
     state.cycleDay = parseInt(val, 10);
     calculatePeriodKey();
 
@@ -317,44 +349,44 @@ function setupEventListeners() {
     renderAllViews();
     alert('יום המחזור עודכן בהצלחה!');
   });
-
-  document.getElementById('add-category-form').addEventListener('submit', handleAddCategory);
-
-  // Exports
-  document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
-  document.getElementById('btn-export-json').addEventListener('click', exportJSON);
 }
 
 // Expense Quick Log Modal
 window.openExpenseSheet = function(catId, catName) {
-  document.getElementById('sheet-category-id').value = catId;
-  document.getElementById('sheet-category-title').textContent = `הוספת הוצאה: ${catName}`;
-  document.getElementById('sheet-amount').value = '';
-  document.getElementById('sheet-note').value = '';
-  document.getElementById('expense-sheet').classList.add('active');
+  const sheet = document.getElementById('expense-sheet');
+  if (!sheet) return;
+
+  const idInput = document.getElementById('sheet-category-id');
+  const titleEl = document.getElementById('sheet-category-title');
+  const amtInput = document.getElementById('sheet-amount');
+  const noteInput = document.getElementById('sheet-note');
+
+  if (idInput) idInput.value = catId;
+  if (titleEl) titleEl.textContent = `הוספת הוצאה: ${catName}`;
+  if (amtInput) amtInput.value = '';
+  if (noteInput) noteInput.value = '';
+
+  sheet.classList.add('active');
 };
 
 function closeExpenseSheet() {
-  document.getElementById('expense-sheet').classList.remove('active');
+  const sheet = document.getElementById('expense-sheet');
+  if (sheet) sheet.classList.remove('active');
 }
 
 async function handleAddExpense(e) {
   e.preventDefault();
-  const catId = document.getElementById('sheet-category-id').value;
-  const amount = parseFloat(document.getElementById('sheet-amount').value) || 0;
-  const note = document.getElementById('sheet-note').value;
+  const catId = document.getElementById('sheet-category-id')?.value;
+  const amount = parseFloat(document.getElementById('sheet-amount')?.value) || 0;
+  const note = document.getElementById('sheet-note')?.value || '';
 
-  if (amount <= 0) return;
+  if (!catId || amount <= 0) return;
 
-  // Find existing budget record
   let budget = state.budgets.find(b => b.category_id === catId);
   const newActual = (budget ? parseFloat(budget.actual_amount || 0) : 0) + amount;
 
   if (state.supabase) {
-    // 1. Log Transaction
     await state.supabase.from('transactions').insert({ category_id: catId, amount, note });
-
-    // 2. Upsert Budget
     await state.supabase.from('monthly_budgets').upsert({
       category_id: catId,
       period_key: state.currentPeriodKey,
@@ -432,8 +464,11 @@ async function handleActivateNewMonth() {
 
 async function handleAddCategory(e) {
   e.preventDefault();
-  const name = document.getElementById('new-cat-name').value.trim();
-  const type = document.getElementById('new-cat-type').value;
+  const nameEl = document.getElementById('new-cat-name');
+  const typeEl = document.getElementById('new-cat-type');
+  
+  const name = nameEl?.value.trim();
+  const type = typeEl?.value || 'expense';
 
   if (!name) return;
 
@@ -449,7 +484,7 @@ async function handleAddCategory(e) {
     renderAllViews();
   }
 
-  document.getElementById('new-cat-name').value = '';
+  if (nameEl) nameEl.value = '';
 }
 
 window.deleteCategory = async function(catId) {
