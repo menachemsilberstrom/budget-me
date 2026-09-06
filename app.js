@@ -224,7 +224,7 @@ function renderDashboard() {
         }).join('');
     }
 
-    renderChart(expCategoryStats);
+    renderChart(expCategoryStats.filter(cat => cat.type === 'expense'));
 }
 
 function renderChart(expenses) {
