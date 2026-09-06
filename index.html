@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ניהול תקציב ביתי</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-info">
+      <span class="header-title">תקציב פעיל</span>
+      <span id="budget-period-display" class="header-period">טוען...</span>
+    </div>
+    <div class="sync-status" id="sync-indicator" title="סטטוס סנכרון">
+      <span class="status-dot"></span>
+      <span id="sync-text">מנותק</span>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <section id="tab-dashboard" class="tab-content active">
+      <div class="summary-grid">
+        <div class="summary-card income">
+          <span class="card-label">הכנסות</span>
+          <div class="card-value" id="dash-income-actual">₪0</div>
+          <span class="card-sub" id="dash-income-planned">מתוכנן: ₪0</span>
+        </div>
+        <div class="summary-card expense">
+          <span class="card-label">הוצאות</span>
+          <div class="card-value" id="dash-expense-actual">₪0</div>
+          <span class="card-sub" id="dash-expense-planned">מתוכנן: ₪0</span>
+        </div>
+        <div class="summary-card balance">
+          <span class="card-label">יתרה פנויה</span>
+          <div class="card-value" id="dash-remaining">₪0</div>
+          <span class="card-sub">לפי התכנון החודשי</span>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <h3 class="card-title">התפלגות הוצאות בפועל</h3>
+        <div class="chart-container">
+          <canvas id="expenseChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">מעקב קטגוריות הוצאה</h3>
+        <p class="card-hint">לחץ על קטגוריה להזנת הוצאה מהירה</p>
+        <div id="category-progress-list" class="category-list"></div>
+      </div>
+    </section>
+
+    <section id="tab-setup" class="tab-content">
+      <div class="card">
+        <h3 class="card-title">תכנון תקציב חודשי</h3>
+        <p class="card-subtitle">הגדר יעד מתוכנן לכל קטגוריה במחזור הפעיל</p>
+        
+        <form id="setup-form">
+          <div id="setup-categories-list" class="setup-list"></div>
+          <button type="submit" class="btn btn-primary btn-block">שמור שינויים בתכנון</button>
+        </form>
+      </div>
+
+      <div class="card action-card">
+        <h3 class="card-title">איפוס והתחלת חודש חדש</h3>
+        <p class="card-subtitle">פעולה זו תנעל את היעדים הנוכחיים ותאפס את סכומי ההוצאות בפועל למחזור החדש.</p>
+        <button id="btn-activate-month" class="btn btn-warning btn-block">הפעל חודש חדש</button>
+      </div>
+    </section>
+
+    <section id="tab-settings" class="tab-content">
+      <div class="card">
+        <h3 class="card-title">חיבור ל-Supabase</h3>
+        <div class="form-group">
+          <label for="cfg-url">Supabase URL</label>
+          <input type="text" id="cfg-url" placeholder="https://xyz.supabase.co">
+        </div>
+        <div class="form-group">
+          <label for="cfg-key">Supabase Anon Key</label>
+          <input type="password" id="cfg-key" placeholder="eyJhbGciOi...">
+        </div>
+        <button id="btn-save-config" class="btn btn-primary btn-block">שמור והתחבר</button>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">הגדרות מחזור</h3>
+        <div class="form-group">
+          <label for="cfg-cycle-day">יום תחילת מחזור בחודש</label>
+          <input type="number" id="cfg-cycle-day" min="1" max="28" value="10">
+        </div>
+        <button id="btn-save-cycle" class="btn btn-secondary btn-block">עדכן יום מחזור</button>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">ניהול קטגוריות</h3>
+        <form id="add-category-form" class="inline-form">
+          <input type="text" id="new-cat-name" placeholder="שם הקטגוריה" required>
+          <select id="new-cat-type">
+            <option value="expense">הוצאה</option>
+            <option value="income">הכנסה</option>
+          </select>
+          <button type="submit" class="btn btn-small btn-primary">הוסף</button>
+        </form>
+        <div id="manage-categories-list" class="manage-list"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">ייצוא נתונים</h3>
+        <div class="export-buttons">
+          <button id="btn-export-csv" class="btn btn-outline">הורד CSV (Excel)</button>
+          <button id="btn-export-json" class="btn btn-outline">הורד JSON</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-tab="tab-dashboard">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>ראשי</span>
+    </button>
+    <button class="nav-item" data-tab="tab-setup">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      <span>תכנון חודשי</span>
+    </button>
+    <button class="nav-item" data-tab="tab-settings">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>הגדרות וייצוא</span>
+    </button>
+  </nav>
+
+  <div id="expense-sheet" class="sheet-backdrop">
+    <div class="sheet-container">
+      <div class="sheet-header">
+        <h3 id="sheet-category-title">הוספת הוצאה</h3>
+        <button class="sheet-close" id="btn-close-sheet">&times;</button>
+      </div>
+      <form id="expense-form">
+        <input type="hidden" id="sheet-category-id">
+        <div class="form-group">
+          <label>סכום (₪)</label>
+          <input type="number" id="sheet-amount" step="0.01" inputmode="decimal" placeholder="0.00" class="large-input" required autofocus>
+        </div>
+        <div class="form-group">
+          <label>הערה (אופציונלי)</label>
+          <input type="text" id="sheet-note" placeholder="לדוגמה: קניות לשבת">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-large">רשום הוצאה</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
