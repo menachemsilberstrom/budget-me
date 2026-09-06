@@ -202,10 +202,13 @@ function renderDashboard() {
     const listEl = document.getElementById('category-progress-list');
     if (listEl) {
         listEl.innerHTML = expCategoryStats.map(cat => {
+            const isIncome = cat.type === 'income';
             const pct = cat.planned > 0 ? Math.min(Math.round((cat.actual / cat.planned) * 100), 100) : (cat.actual > 0 ? 100 : 0);
             let statusClass = '';
-            if (pct > 90 && pct <= 100) statusClass = 'warning';
-            if (cat.actual > cat.planned && cat.planned > 0) statusClass = 'danger';
+            if (!isIncome) {
+                if (pct > 90 && pct <= 100) statusClass = 'warning';
+                if (cat.actual > cat.planned && cat.planned > 0) statusClass = 'danger';
+            }
 
             return `
                 <div class="cat-item" onclick="openExpenseSheet('${cat.id}', '${cat.name}')">
